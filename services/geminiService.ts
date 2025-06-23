@@ -1,12 +1,12 @@
 
-import { GoogleGenAI } from "@google/genai"; // Removed GenerateContentResponse, GenerateContentParameters, Chat as they are mainly for typing
+import { GoogleGenAI, Chat, GenerateContentResponse, GenerateContentParameters } from "@google/genai";
 import { GEMINI_TEXT_MODEL } from '../constants';
-// Removed ChatMessage, InstanceData, Alert from import as they are types from types.ts
+import { ChatMessage, InstanceData, Alert } from '../types';
 
-let ai = null; // Removed : GoogleGenAI | null
-let currentChat = null; // Removed : Chat | null
+let ai: GoogleGenAI | null = null;
+let currentChat: Chat | null = null;
 
-const initializeGemini = () => { // Removed (): GoogleGenAI return type
+const initializeGemini = (): GoogleGenAI => {
   if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set for Gemini.");
   }
@@ -17,142 +17,118 @@ const initializeGemini = () => { // Removed (): GoogleGenAI return type
 };
 
 export const startOrContinueChat = async (
-  userMessage, // Removed : string
-  history, // Removed : ChatMessage[]
-  systemInstruction, // Removed ?: string
-  instanceData, // Removed ?: InstanceData | null
-  alerts // Removed ?: Alert[]
-) => { // Removed : Promise<string> return type
+  userMessage: string,
+  history: ChatMessage[], 
+  systemInstruction?: string,
+  instanceData?: InstanceData | null, // Will likely be null
+  alerts?: Alert[] // Will likely be empty
+): Promise<string> => {
   const genAI = initializeGemini();
 
-  let promptContent = "";
-  if (instanceData) {
-    promptContent += "Current Proxmox Instance Data Snapshot:\n";
+  let promptContext = "Proxmox VE Context: No specific live instance data is available in this frontend-only application. Answer based on general Proxmox VE knowledge or provided user query.\n";
+
+  if (instanceData) { // This block may not be hit often if instanceData is always null
+    promptContext = "Current Proxmox Instance Data Snapshot (limited view):\n";
     instanceData.nodes.forEach(node => {
-      promptContent += `Node ${node.name}: CPU ${node.cpu.averageLoad}%, Mem ${node.memory.percentage}%, PVE Ver ${node.pveVersion}\n`;
-      node.storagePools.forEach(sp => {
-        promptContent += `  Storage ${sp.name}: ${sp.metric.percentage}% used (${sp.metric.used}${sp.metric.unit}/${sp.metric.total}${sp.metric.unit})\n`;
-      });
+      promptContext += `Node ${node.name}: CPU ${node.cpu.averageLoad}%, Mem ${node.memory.percentage}%, PVE Ver ${node.pveVersion}\n`;
     });
-    instanceData.vms.forEach(vm => {
-      promptContent += `VM ${vm.name} (on ${vm.nodeId}): CPU ${vm.cpuUsage}%, Mem ${vm.memory.percentage}%\n`;
-    });
-     instanceData.lxcs.forEach(lxc => {
-      promptContent += `LXC ${lxc.name} (on ${lxc.nodeId}): CPU ${lxc.cpuUsage}%, Mem ${lxc.memory.percentage}%\n`;
-    });
-    promptContent += "\n";
+    promptContext += "\n";
   }
 
-  if (alerts && alerts.length > 0) {
-    promptContent += "Active Alerts:\n";
+  if (alerts && alerts.length > 0) { // This block may not be hit often
+    promptContext += "Active Alerts (summary):\n";
     alerts.forEach(alert => {
-      promptContent += `- ${alert.severity}: ${alert.message}\n`;
+      promptContext += `- ${alert.severity}: ${alert.message}\n`;
     });
-    promptContent += "\n";
+    promptContext += "\n";
   }
   
-  promptContent += `User query: ${userMessage}`;
+  const fullPrompt = `${promptContext}User query: ${userMessage}`;
 
   if (!currentChat) {
-    const modelOperationConfig: { 
-      systemInstruction?: string; 
-      thinkingConfig?: { thinkingBudget: number; } 
-    } = {}; // This will hold systemInstruction, etc.
+    type ChatConfigType = GenerateContentParameters['config'];
+    
+    const modelOperationConfig: ChatConfigType = {};
     if (systemInstruction) {
       modelOperationConfig.systemInstruction = systemInstruction;
     }
-    // Add other potential model configurations to modelOperationConfig here if needed.
-    // For example, if thinkingConfig is desired for GEMINI_TEXT_MODEL:
-    // if (GEMINI_TEXT_MODEL === "gemini-2.5-flash-preview-04-17") {
-    //   // modelOperationConfig.thinkingConfig = { thinkingBudget: 0 }; // Example to disable thinking
-    // }
 
     currentChat = genAI.chats.create({
       model: GEMINI_TEXT_MODEL,
-      // Pass the config object only if it has properties, otherwise it will be undefined.
-      // The SDK handles config: undefined correctly.
       config: Object.keys(modelOperationConfig).length > 0 ? modelOperationConfig : undefined
     });
   }
   
-  // const geminiHistory = history.map(msg => ({ // This was illustrative, not strictly needed with currentChat.sendMessage
-  //   role: msg.sender === 'user' ? 'user' : 'model',
-  //   parts: [{text: msg.text}]
-  // }));
-
   try {
-    // The 'Chat' object from SDK should handle history.
-    const response = await currentChat.sendMessage({ message: promptContent }); // Removed : GenerateContentResponse type
+    const response: GenerateContentResponse = await currentChat.sendMessage({ message: fullPrompt });
     return response.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    if (error instanceof Error && error.message.includes('API_KEY_INVALID')) { // Check if error has message property
-         return "Error: The Gemini API key is invalid or not configured correctly. Please check your API_KEY environment variable.";
+    if (error.message && error.message.includes('API_KEY_INVALID')) { 
+         return "Error: The Gemini API key is invalid or not configured correctly. Please check your API_KEY setting.";
     }
     return "Sorry, I encountered an error trying to process your request. Please check the console for details.";
   }
 };
 
 export const generateProxmoxReportSummary = async (
-  instanceData, // Removed : InstanceData
-  alerts // Removed : Alert[]
-) => { // Removed : Promise<string> return type
+  instanceData: InstanceData | null, // Will likely be null
+  alerts: Alert[] // Will likely be empty
+): Promise<string> => {
   const genAI = initializeGemini();
-  let prompt = `You are a Proxmox VE monitoring assistant. Generate a concise summary and potential recommendations based on the following data.
-  Focus on critical issues and actionable advice. Be brief.
-
-  Current Proxmox Instance Data:
-  Total Nodes: ${instanceData.nodes.length}
-  Total VMs: ${instanceData.vms.length}
-  Total LXCs: ${instanceData.lxcs.length}
+  let prompt = `You are a Proxmox VE monitoring assistant. 
+  Generate a concise summary and potential recommendations based on general Proxmox VE best practices or any high-level information provided.
+  If specific data is given, use it. Otherwise, provide general advice. Be brief.
+  Focus on actionable advice.
+  Acknowledge if no specific data is available for detailed analysis.
+  ---
   `;
 
-  instanceData.nodes.forEach(node => {
+  if (instanceData && instanceData.nodes && instanceData.nodes.length > 0) {
     prompt += `
-    Node: ${node.name} (Status: ${node.status})
-      CPU: ${node.cpu.averageLoad}% avg, ${node.cpu.cores} cores
-      Memory: ${node.memory.percentage}% used (${node.memory.used}${node.memory.unit} / ${node.memory.total}${node.memory.unit})
-      PVE Version: ${node.pveVersion}, Updates Available: ${node.updatesAvailable ?? 'N/A'}
-      Storage:`;
-    node.storagePools.forEach(sp => {
-      prompt += `\n        - ${sp.name} (${sp.type}): ${sp.metric.percentage}% used (${sp.metric.used}${sp.metric.unit} of ${sp.metric.total}${sp.metric.unit})`;
-    });
-  });
+    Overview of Provided Proxmox Instance Data (if any):
+    Total Nodes: ${instanceData.nodes.length}
+    Total VMs: ${instanceData.vms?.length || 0}
+    Total LXCs: ${instanceData.lxcs?.length || 0}
+    `;
 
-  if (instanceData.vms.length > 0) {
-    prompt += "\n\nKey VMs with high resource usage (if any):";
-    instanceData.vms.filter(vm => vm.cpuUsage > 75 || (vm.memory.percentage && vm.memory.percentage > 75)).slice(0,3).forEach(vm => {
-        prompt += `\n  - VM ${vm.name} (on ${vm.nodeId}): CPU ${vm.cpuUsage}%, Memory ${vm.memory.percentage}%`;
-    });
-  }
-  
-  if (alerts.length > 0) {
-    prompt += "\n\nActive Alerts:";
-    alerts.forEach(alert => {
-      prompt += `\n  - ${alert.severity}: ${alert.message} (Resource: ${alert.resourceId || 'System'})`;
+    instanceData.nodes.forEach(node => {
+        prompt += `
+        Node: ${node.name} (Status: ${node.status || 'N/A'})
+          CPU Avg: ${node.cpu?.averageLoad || 'N/A'}%
+          Memory Used: ${node.memory?.percentage || 'N/A'}%
+          PVE Version: ${node.pveVersion || 'N/A'}, Updates Available: ${node.updatesAvailable ?? 'N/A'}`;
     });
   } else {
-    prompt += "\n\nActive Alerts: None";
+    prompt += "No specific Proxmox instance data is available for this report. The summary will be based on general knowledge.\n";
+  }
+  
+  if (alerts && alerts.length > 0) {
+    prompt += "\n\nActive Alerts Overview (if any):";
+    alerts.forEach(alert => {
+      prompt += `\n  - ${alert.severity}: ${alert.message}`;
+    });
+  } else if (instanceData) { // Only add "Active Alerts: None" if we had instanceData to check against
+    prompt += "\n\nActive Alerts: None reported in provided data.";
   }
 
-  prompt += "\n\nProvide a brief overall health assessment and 1-3 key recommendations if issues are present. If system is healthy, state that.";
+  prompt += "\n\nProvide a brief overall health assessment and 1-3 key recommendations. If system appears healthy or no data is present, state that and offer general Proxmox best practices.";
 
   try {
-    const response = await genAI.models.generateContent({ // Removed : GenerateContentResponse type
+    const response: GenerateContentResponse = await genAI.models.generateContent({
         model: GEMINI_TEXT_MODEL,
         contents: prompt
     });
     return response.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating report summary with Gemini:", error);
-     if (error instanceof Error && error.message.includes('API_KEY_INVALID')) { // Check if error has message property
+     if (error.message && error.message.includes('API_KEY_INVALID')) { 
          return "Error: The Gemini API key is invalid. Cannot generate AI summary.";
     }
     return "Error generating AI summary for the report.";
   }
 };
 
-// Function to reset chat history (e.g., when switching instances or topics)
-export const resetChat = () => {
+export const resetChat = (): void => {
   currentChat = null;
 };

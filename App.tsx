@@ -1,78 +1,52 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-// Types are used for annotations, browser will ignore them if types.ts isn't JS-parseable
-// For a non-transpiled environment, these type imports would ideally be removed or handled differently.
-import { ProxmoxInstanceConfig, InstanceData, Alert, UserSettings, Status, TabOption } from './types';
-import { fetchMockInstanceData } from './services/mockProxmoxService';
-import { APP_TITLE, DEFAULT_USER_SETTINGS, MOCK_DATA_REFRESH_INTERVAL_MS, NAV_TABS, MOCK_API_KEY_PLACEHOLDER } from './constants';
-// Ensured all local component imports are relative
+import { ProxmoxInstanceConfig, InstanceData, Alert, UserSettings, Status, TabOption, StatusType } from './types';
+// Removed: import { fetchMockInstanceData } from './services/mockProxmoxService';
+import { APP_TITLE, DEFAULT_USER_SETTINGS, NAV_TABS, MOCK_API_KEY_PLACEHOLDER } from './constants'; // Removed MOCK_DATA_REFRESH_INTERVAL_MS
 import InstanceConfigurator from './components/InstanceConfigurator';
 import InstanceDashboard from './components/InstanceDashboard';
 import GeminiProxmoxAssistant from './components/GeminiProxmoxAssistant';
 import SettingsManager from './components/SettingsManager';
 import ReportViewer from './components/ReportViewer';
-import SetupGuide from './components/SetupGuide'; // Added SetupGuide import
+import SetupGuide, { SetupGuideProps } from './components/SetupGuide';
 import { resetChat as resetGeminiChatInternal } from './services/geminiService';
 import { ShieldExclamationIcon, SunIcon } from '@heroicons/react/24/solid';
 
-
-const getInitialApiKey = (): string => {
-    const envApiKey = process.env.API_KEY;
-    // Fallback to localStorage if process.env.API_KEY is the placeholder, then to the placeholder itself
-    if (envApiKey && envApiKey !== MOCK_API_KEY_PLACEHOLDER) {
-        return envApiKey;
-    }
-    const savedKey = localStorage.getItem('geminiApiKey');
-    return savedKey || MOCK_API_KEY_PLACEHOLDER;
-};
-
-// Ensure process.env.API_KEY is initialized for the Gemini service
-if (!process.env.API_KEY || process.env.API_KEY === "YOUR_GEMINI_API_KEY") {
-  const initialKey = getInitialApiKey();
-  process.env.API_KEY = initialKey;
+interface AppError {
+  type: "CONFIG_ERROR" | "REAL_DATA_INFO" | "CONFIG_INCOMPLETE" | "FETCH_ERROR" | "INFO";
+  message: string;
 }
 
+if (typeof process.env.API_KEY === 'undefined') {
+  process.env.API_KEY = MOCK_API_KEY_PLACEHOLDER;
+}
 
-const App = () => { // Removed :React.FC type annotation
-  const [configuredInstances, setConfiguredInstances] = useState(() => { // Removed type annotation
+const App: React.FC = () => {
+  const [configuredInstances, setConfiguredInstances] = useState<ProxmoxInstanceConfig[]>(() => {
     const saved = localStorage.getItem('proxmoxInstances');
     return saved ? JSON.parse(saved) : [];
   });
-  const [selectedInstanceId, setSelectedInstanceId] = useState(null); // Removed type annotation
-  const [currentInstanceData, setCurrentInstanceData] = useState(null); // Removed type annotation
-  const [alerts, setAlerts] = useState([]); // Removed type annotation
-  const [isLoading, setIsLoading] = useState(false); // Removed type annotation
-  const [error, setError] = useState(null); // Removed type annotation for error state
-  const [activeTab, setActiveTab] = useState(NAV_TABS[0].id); // Removed type annotation
-  const [userSettings, setUserSettings] = useState(() => { // Removed type annotation
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [currentInstanceData, setCurrentInstanceData] = useState<InstanceData | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<AppError | null>(null);
+  const [activeTab, setActiveTab] = useState<string>(NAV_TABS[0].id);
+  const [userSettings, setUserSettings] = useState<UserSettings>(() => {
     const saved = localStorage.getItem('userSettings');
     return saved ? JSON.parse(saved) : DEFAULT_USER_SETTINGS;
   });
-   const [geminiApiKey, setGeminiApiKey] = useState(getInitialApiKey); // Use getter function directly
 
-  const [showSetupGuide, setShowSetupGuide] = useState(() => {
+  const isApiKeyEffectivelySet = process.env.API_KEY !== undefined && process.env.API_KEY !== MOCK_API_KEY_PLACEHOLDER && process.env.API_KEY !== "YOUR_GEMINI_API_KEY";
+
+  const [showSetupGuide, setShowSetupGuide] = useState<boolean>(() => {
     const guideCompleted = localStorage.getItem('setupGuideCompleted');
     if (guideCompleted === 'true') {
       return false;
     }
     const instancesExist = (localStorage.getItem('proxmoxInstances') ? JSON.parse(localStorage.getItem('proxmoxInstances') || '[]') : []).length > 0;
-    const keyIsPlaceholder = getInitialApiKey() === MOCK_API_KEY_PLACEHOLDER;
-    
-    // Show if not completed AND (no instances OR key is placeholder)
-    return !instancesExist || keyIsPlaceholder;
+    return !instancesExist || !isApiKeyEffectivelySet;
   });
-
-
-  useEffect(() => {
-    // Update process.env.API_KEY for Gemini service when geminiApiKey state changes
-    if (geminiApiKey && geminiApiKey !== MOCK_API_KEY_PLACEHOLDER) {
-        process.env.API_KEY = geminiApiKey;
-    } else {
-        // If it's placeholder, ensure process.env.API_KEY is also placeholder or default
-        // This handles cases where user clears the key from settings.
-        process.env.API_KEY = MOCK_API_KEY_PLACEHOLDER;
-    }
-  }, [geminiApiKey]);
 
   useEffect(() => {
     localStorage.setItem('proxmoxInstances', JSON.stringify(configuredInstances));
@@ -82,157 +56,76 @@ const App = () => { // Removed :React.FC type annotation
     localStorage.setItem('userSettings', JSON.stringify(userSettings));
   }, [userSettings]);
 
-  useEffect(() => {
-    if (geminiApiKey && geminiApiKey !== MOCK_API_KEY_PLACEHOLDER) {
-        localStorage.setItem('geminiApiKey', geminiApiKey);
-    } else {
-        localStorage.removeItem('geminiApiKey'); // Remove if it's the placeholder
-    }
-  }, [geminiApiKey]);
+  const loadInstanceData = useCallback(async (instanceId: string | null) => {
+    setCurrentInstanceData(null); // Always start with null data
+    setAlerts([]);
+    setError(null);
+    setIsLoading(false); // No actual loading will occur in frontend-only
 
-  const isApiKeyEffectivelySet = geminiApiKey !== MOCK_API_KEY_PLACEHOLDER;
-
-  const loadInstanceData = useCallback(async (instanceId) => { // Removed type annotation for instanceId
     if (!instanceId) {
-      setCurrentInstanceData(null);
-      setAlerts([]);
-      setError(null);
       return;
     }
+
     const instanceConfig = configuredInstances.find(inst => inst.id === instanceId);
     if (!instanceConfig) {
       setError({type: "CONFIG_ERROR", message: "Selected instance configuration not found."});
-      setCurrentInstanceData(null);
-      setAlerts([]);
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    setCurrentInstanceData(null); 
-    setAlerts([]); 
-
-    if (instanceConfig.apiUrl && instanceConfig.apiUrl.trim() !== '' && 
-        instanceConfig.apiToken && instanceConfig.apiToken.trim() !== '') {
-      
-      await new Promise(resolve => setTimeout(resolve, 50)); 
-      
+    if (!instanceConfig.apiUrl || !instanceConfig.apiUrl.trim() || !instanceConfig.apiToken || !instanceConfig.apiToken.trim()) {
+      setError({
+        type: "CONFIG_INCOMPLETE",
+        message: `Configuration for instance "${instanceConfig.name}" is incomplete. API URL and/or Token are missing. Please complete the configuration in the 'Instances' tab.`
+      });
+    } else {
+      // This is now the primary path for configured instances.
+      // It informs the user that a backend is needed for actual data.
       setError({
         type: "REAL_DATA_INFO",
-        message: `Displaying real-time data from ${instanceConfig.name} (${instanceConfig.apiUrl}) requires a backend proxy. This is because web browsers restrict direct API calls to different servers for security (CORS policy). This frontend-only application cannot directly connect to your Proxmox API. To see live data, a backend service is needed to fetch data from Proxmox and relay it to this dashboard.`
+        message: `Real-time data from Proxmox instance "${instanceConfig.name}" (${instanceConfig.apiUrl}) cannot be displayed. This frontend-only application requires a backend/proxy component to securely connect to your Proxmox API due to browser CORS policy. Please refer to the documentation for setting up a backend.`
       });
-      setIsLoading(false);
-    } else {
-       try {
-           if (!instanceConfig.apiUrl || !instanceConfig.apiToken) {
-             setError({
-                type: "CONFIG_INCOMPLETE",
-                message: `Configuration for instance "${instanceConfig.name}" is incomplete. Please provide API URL and Token in the 'Instances' tab.`
-             });
-             setIsLoading(false);
-             return;
-           }
-           setError({
-             type: "INFO",
-             message: "Instance selected, but it's not configured for a real connection attempt and mock data loading is disabled for user-configured instances to avoid 'fake data'."
-           })
-        } catch (err) {
-            console.error("Error during data handling:", err);
-            setError({type: "FETCH_ERROR", message: "Failed to process data for instance. See console for details."});
-        } finally {
-            setIsLoading(false);
-        }
     }
   }, [configuredInstances]);
 
   useEffect(() => {
     if (selectedInstanceId) {
-      if (!error || error.type !== "REAL_DATA_INFO") {
-        loadInstanceData(selectedInstanceId); 
-
-        const intervalId = setInterval(() => {
-          if (selectedInstanceId && (!error || (error.type !== "REAL_DATA_INFO" && error.type !== "CONFIG_INCOMPLETE" && error.type !== "CONFIG_ERROR"))) {
-              loadInstanceData(selectedInstanceId);
-          }
-        }, MOCK_DATA_REFRESH_INTERVAL_MS);
-        return () => clearInterval(intervalId);
-      } else {
-        loadInstanceData(selectedInstanceId);
-      }
+      loadInstanceData(selectedInstanceId);
+      // No automatic refresh interval as data is not live.
     } else {
       setCurrentInstanceData(null);
       setAlerts([]);
       setError(null);
     }
-  }, [selectedInstanceId, loadInstanceData, error]);
+  }, [selectedInstanceId, loadInstanceData]);
 
 
+  // Alert generation from mock data is removed.
+  // Real alerts would come from a backend.
   useEffect(() => {
-    if (!currentInstanceData) {
-      setAlerts([]);
-      return;
-    }
-    const newAlerts = []; 
-    currentInstanceData.nodes.forEach(node => {
-      if (node.cpu.averageLoad > userSettings.alertThresholds.cpuUsagePercent) {
-        newAlerts.push({ id: `node-cpu-${node.id}`, severity: 'Critical', message: `Node ${node.name} CPU usage is ${node.cpu.averageLoad.toFixed(1)}% (Threshold: ${userSettings.alertThresholds.cpuUsagePercent}%)`, timestamp: new Date().toISOString(), resourceId: node.id, resourceType: 'Node' });
-      }
-      if (node.memory.percentage && node.memory.percentage > userSettings.alertThresholds.memoryUsagePercent) {
-        newAlerts.push({ id: `node-mem-${node.id}`, severity: 'Warning', message: `Node ${node.name} memory usage is ${node.memory.percentage}% (Threshold: ${userSettings.alertThresholds.memoryUsagePercent}%)`, timestamp: new Date().toISOString(), resourceId: node.id, resourceType: 'Node' });
-      }
-      node.storagePools.forEach(pool => {
-        if (pool.metric.percentage && pool.metric.percentage > userSettings.alertThresholds.diskUsagePercent) {
-          newAlerts.push({ id: `node-disk-${node.id}-${pool.id}`, severity: 'Warning', message: `Node ${node.name} storage pool '${pool.name}' usage is ${pool.metric.percentage}% (Threshold: ${userSettings.alertThresholds.diskUsagePercent}%)`, timestamp: new Date().toISOString(), resourceId: `${node.id}-${pool.name}`, resourceType: 'Node' });
-        }
-        const freeGB = pool.metric.total - pool.metric.used;
-        if (pool.metric.unit.toUpperCase() === 'GB' && freeGB < userSettings.alertThresholds.lowDiskFreeGb) {
-             newAlerts.push({ id: `node-disk-low-${node.id}-${pool.id}`, severity: 'Critical', message: `Node ${node.name} storage pool '${pool.name}' has only ${freeGB.toFixed(1)}GB free (Threshold: <${userSettings.alertThresholds.lowDiskFreeGb}GB)`, timestamp: new Date().toISOString(), resourceId: `${node.id}-${pool.name}`, resourceType: 'Node' });
-        }
-      });
-      node.services.forEach(service => {
-        if (service.status === Status.Error || service.status === Status.Critical) { 
-            newAlerts.push({ id: `service-${node.id}-${service.name}`, severity: 'Critical', message: `Service '${service.name}' on node ${node.name} is in ${service.status} state.`, timestamp: new Date().toISOString(), resourceId: node.id, resourceType: 'Node' });
-        }
-      });
-       if(node.updatesAvailable && node.updatesAvailable > 10) {
-           newAlerts.push({ id: `updates-${node.id}`, severity: 'Info', message: `Node ${node.name} has ${node.updatesAvailable} available updates. Consider reviewing and applying them.`, timestamp: new Date().toISOString(), resourceId: node.id, resourceType: 'Node' });
-       }
+    setAlerts([]); // Clear alerts when instance data context changes or is null
+  }, [currentInstanceData]);
 
-    });
-     currentInstanceData.vms.forEach(vm => {
-        if (vm.cpuUsage > (userSettings.alertThresholds.cpuUsagePercent + 10)) {
-             newAlerts.push({ id: `vm-cpu-${vm.id}`, severity: 'Warning', message: `VM ${vm.name} CPU usage is ${vm.cpuUsage.toFixed(1)}%`, timestamp: new Date().toISOString(), resourceId: vm.id, resourceType: 'VM' });
-        }
-        if (vm.memory.percentage && vm.memory.percentage > (userSettings.alertThresholds.memoryUsagePercent + 5)) {
-             newAlerts.push({ id: `vm-mem-${vm.id}`, severity: 'Warning', message: `VM ${vm.name} memory usage is ${vm.memory.percentage}%`, timestamp: new Date().toISOString(), resourceId: vm.id, resourceType: 'VM' });
-        }
-         if (vm.backupStatus && vm.backupStatus.status === 'Failed') {
-             newAlerts.push({ id: `vm-backup-${vm.id}`, severity: 'Warning', message: `VM ${vm.name} last backup failed on ${vm.backupStatus.lastBackup}.`, timestamp: new Date().toISOString(), resourceId: vm.id, resourceType: 'VM' });
-         }
-    });
-
-    setAlerts(newAlerts);
-  }, [currentInstanceData, userSettings]);
-
-  const handleAddInstance = (instance) => { // Removed type annotation
+  const handleAddInstance = (instance: ProxmoxInstanceConfig) => {
     setConfiguredInstances(prev => [...prev, instance]);
     setSelectedInstanceId(instance.id); 
     setError(null); 
+    resetGeminiChatInternal();
   };
 
-  const handleRemoveInstance = (instanceId) => { // Removed type annotation
+  const handleRemoveInstance = (instanceId: string) => {
     setConfiguredInstances(prev => prev.filter(inst => inst.id !== instanceId));
     if (selectedInstanceId === instanceId) {
       setSelectedInstanceId(null);
       setCurrentInstanceData(null);
       setAlerts([]);
       setError(null);
+      resetGeminiChatInternal();
     }
   };
   
-  const handleSelectInstance = (instanceId) => { // Removed type annotation
+  const handleSelectInstance = (instanceId: string | null) => {
     if(instanceId !== selectedInstanceId) {
-        resetGeminiChatInternal();
+        resetGeminiChatInternal(); 
         setError(null); 
         setCurrentInstanceData(null); 
         setAlerts([]);
@@ -240,52 +133,51 @@ const App = () => { // Removed :React.FC type annotation
     setSelectedInstanceId(instanceId);
   };
 
-  const handleUpdateSettings = (newSettings) => { // Removed type annotation
+  const handleUpdateSettings = (newSettings: UserSettings) => {
     setUserSettings(newSettings);
   };
   
-  const handleUpdateApiKey = (key) => { // Removed type annotation for key
-    const newApiKey = key === '' ? MOCK_API_KEY_PLACEHOLDER : key;
-    setGeminiApiKey(newApiKey);
-    // process.env.API_KEY is updated by the useEffect hook for geminiApiKey
-    resetGeminiChatInternal();
-  };
-
   const handleSetupGuideDismiss = () => {
     localStorage.setItem('setupGuideCompleted', 'true');
     setShowSetupGuide(false);
   };
-  
-  const handleSaveApiKeyFromGuide = (key) => {
-    handleUpdateApiKey(key); // This will update state and localStorage
-  };
 
-  const handleSaveInstanceFromGuide = (instance) => {
-     handleAddInstance(instance); // This will update state and localStorage
-     // Optionally, automatically switch to dashboard tab
-     // setActiveTab('dashboard');
+  const handleSaveInstanceFromGuide: SetupGuideProps['onSaveInstance'] = (instance) => {
+     handleAddInstance(instance); 
   };
 
 
   const renderActiveTab = () => {
-    let specificErrorMessage = null;
+    let specificMessageForView: string | null = null;
     if (error && (error.type === "REAL_DATA_INFO" || error.type === "CONFIG_INCOMPLETE" || error.type === "CONFIG_ERROR")) {
-        specificErrorMessage = error.message;
+        specificMessageForView = error.message;
     }
+    // If an instance is selected but currentInstanceData is null (which it always will be without a backend)
+    // and there's no specific error message yet (e.g. REAL_DATA_INFO), set a generic one for dashboard/reports.
+    if (selectedInstanceId && !currentInstanceData && !specificMessageForView && (activeTab === 'dashboard' || activeTab === 'reports')) {
+        const selectedConf = configuredInstances.find(i => i.id === selectedInstanceId);
+        if (selectedConf?.apiUrl && selectedConf?.apiToken) {
+             specificMessageForView = `Data for "${selectedConf.name}" cannot be displayed. A backend is required to fetch live data from your Proxmox server.`;
+        } else if (selectedConf) {
+            specificMessageForView = `Configuration for "${selectedConf.name}" is incomplete. Please check API URL and Token in the 'Instances' tab.`;
+        }
+    }
+
 
     switch (activeTab) {
       case 'dashboard':
-        return <InstanceDashboard instanceData={currentInstanceData} alerts={alerts} isLoading={isLoading} specificMessage={specificErrorMessage} />;
+        return <InstanceDashboard instanceData={null} alerts={alerts} isLoading={isLoading} specificMessage={specificMessageForView} />;
       case 'instances':
         return <InstanceConfigurator instances={configuredInstances} onAddInstance={handleAddInstance} onRemoveInstance={handleRemoveInstance} onSelectInstance={handleSelectInstance} selectedInstanceId={selectedInstanceId} />;
       case 'reports':
-        return <ReportViewer instanceData={currentInstanceData} alerts={alerts} settings={userSettings} apiKeySet={isApiKeyEffectivelySet} specificMessage={specificErrorMessage} />;
+        return <ReportViewer instanceData={null} alerts={alerts} settings={userSettings} apiKeySet={isApiKeyEffectivelySet} specificMessage={specificMessageForView} />;
       case 'assistant':
-        return <GeminiProxmoxAssistant instanceData={currentInstanceData} alerts={alerts} apiKeySet={isApiKeyEffectivelySet} />;
+        // Assistant might not need specificMessage, it operates more generally or with explicit user queries
+        return <GeminiProxmoxAssistant instanceData={null} alerts={alerts} apiKeySet={isApiKeyEffectivelySet} />;
       case 'settings':
-        return <SettingsManager userSettings={userSettings} onUpdateSettings={handleUpdateSettings} apiKey={geminiApiKey} onUpdateApiKey={handleUpdateApiKey} />;
+        return <SettingsManager userSettings={userSettings} onUpdateSettings={handleUpdateSettings} isApiKeyConfigured={isApiKeyEffectivelySet} />;
       default:
-        return <InstanceDashboard instanceData={currentInstanceData} alerts={alerts} isLoading={isLoading} specificMessage={specificErrorMessage} />;
+        return <InstanceDashboard instanceData={null} alerts={alerts} isLoading={isLoading} specificMessage={specificMessageForView} />;
     }
   };
 
@@ -293,20 +185,19 @@ const App = () => { // Removed :React.FC type annotation
     <div className="min-h-screen flex flex-col bg-gray-900">
       {showSetupGuide && (
         <SetupGuide
-          onSaveApiKey={handleSaveApiKeyFromGuide}
           onSaveInstance={handleSaveInstanceFromGuide}
           onDismiss={handleSetupGuideDismiss}
-          currentApiKey={geminiApiKey}
+          isApiKeyPreConfigured={isApiKeyEffectivelySet}
         />
       )}
       <header className="bg-gray-800 shadow-lg sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-sky-400 flex items-center">
-            <SunIcon className="w-8 h-8 mr-2 text-yellow-400 animate-pulse" /> 
+            <SunIcon className="w-8 h-8 mr-2 text-yellow-400" /> 
             {APP_TITLE}
           </h1>
           <nav className="flex space-x-1 sm:space-x-2">
-            {NAV_TABS.map((tab) => ( 
+            {NAV_TABS.map((tab: TabOption) => ( 
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -322,7 +213,7 @@ const App = () => { // Removed :React.FC type annotation
         {!isApiKeyEffectivelySet && (
              <div className="bg-yellow-600 text-white text-xs text-center py-1 px-4">
                 <ShieldExclamationIcon className="w-4 h-4 inline mr-1" />
-                Gemini API Key not configured. AI features may be limited or disabled. Check Settings or the setup guide.
+                Gemini API Key not configured. AI features may be limited or disabled. Please set the API_KEY environment variable.
             </div>
         )}
       </header>
@@ -333,7 +224,7 @@ const App = () => { // Removed :React.FC type annotation
       </main>
 
       <footer className="bg-gray-800 text-center p-4 text-xs text-gray-500 border-t border-gray-700">
-        &copy; {new Date().getFullYear()} {APP_TITLE}. For real Proxmox data, a backend is required.
+        &copy; {new Date().getFullYear()} {APP_TITLE}. For real-time Proxmox data visualization, a backend component is required.
       </footer>
     </div>
   );

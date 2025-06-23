@@ -1,10 +1,15 @@
 
 import React from 'react';
-// import { Metric, CpuMetric } from '../types'; // Types for props, browser ignores if not JS
+import { Metric, CpuMetric } from '../types';
 
-// Removed MetricDisplayProps interface
+interface MetricDisplayProps {
+  label: string;
+  metric: Metric | CpuMetric; // Union type to handle both
+  icon?: React.ReactNode;
+  small?: boolean;
+}
 
-const MetricDisplay = ({ label, metric, icon, small = false }) => { // Removed React.FC and props type
+const MetricDisplay: React.FC<MetricDisplayProps> = ({ label, metric, icon, small = false }) => {
   const percentage = metric.percentage ?? ('averageLoad' in metric ? metric.averageLoad : 0);
   const displayValue = 'averageLoad' in metric 
     ? `${metric.averageLoad.toFixed(1)}%` 
@@ -34,7 +39,7 @@ const MetricDisplay = ({ label, metric, icon, small = false }) => { // Removed R
           style={{ width: `${percentage}%` }}
         ></div>
       </div>
-      {'cores' in metric && (
+      {'cores' in metric && metric.cores !== undefined && ( // Check if cores exists and is not undefined
         <p className={`${textSize} text-gray-400 mt-1`}>{metric.cores} Cores</p>
       )}
     </div>

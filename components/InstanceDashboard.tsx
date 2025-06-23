@@ -1,12 +1,14 @@
 
 import React from 'react';
-import { Status } from '../types'; // Import Status object
+import { InstanceData, Alert, ProxmoxNode, VirtualResource, Status, StatusType } from '../types';
 import MetricDisplay from './MetricDisplay';
 import { ServerIcon, CpuChipIcon, ArchiveBoxIcon, WifiIcon, ShieldExclamationIcon, InformationCircleIcon, CloudIcon, CubeIcon, CogIcon, CircleStackIcon, ClockIcon, InboxStackIcon, WrenchScrewdriverIcon, ComputerDesktopIcon } from '@heroicons/react/24/outline';
 
-// Removed InstanceDashboardProps interface
+interface StatusIndicatorProps {
+  status: StatusType;
+}
 
-const StatusIndicator = ({ status }) => { // Removed React.FC and type annotation
+const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status }) => {
   let color = 'bg-gray-500'; // Unknown
   if (status === Status.Running || status === Status.Ok) color = 'bg-green-500';
   else if (status === Status.Stopped) color = 'bg-yellow-500';
@@ -16,7 +18,13 @@ const StatusIndicator = ({ status }) => { // Removed React.FC and type annotatio
   return <span className={`inline-block w-3 h-3 ${color} rounded-full mr-2`} title={status}></span>;
 };
 
-const NodeCard = ({ node }) => ( // Removed React.FC and type annotation
+interface NodeCardProps {
+  node: ProxmoxNode;
+}
+
+// NodeCard, VirtualResourceCard remain as they might be used if a backend is ever implemented
+// and InstanceData gets populated. For now, they won't be rendered if InstanceData is null.
+const NodeCard: React.FC<NodeCardProps> = ({ node }) => (
   <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
     <div className="flex justify-between items-center mb-3">
       <h3 className="text-xl font-semibold text-sky-400 flex items-center">
@@ -66,7 +74,11 @@ const NodeCard = ({ node }) => ( // Removed React.FC and type annotation
   </div>
 );
 
-const VirtualResourceCard = ({ resource }) => ( // Removed React.FC and type annotation
+interface VirtualResourceCardProps {
+  resource: VirtualResource;
+}
+
+const VirtualResourceCard: React.FC<VirtualResourceCardProps> = ({ resource }) => (
   <div className="bg-gray-800 p-3 rounded-lg shadow">
     <div className="flex justify-between items-center mb-2">
       <h4 className="text-lg font-medium text-sky-500 flex items-center">
@@ -97,9 +109,15 @@ const VirtualResourceCard = ({ resource }) => ( // Removed React.FC and type ann
   </div>
 );
 
+interface InstanceDashboardProps {
+  instanceData: InstanceData | null; // Will be null
+  alerts: Alert[]; // Will be empty
+  isLoading: boolean;
+  specificMessage?: string | null;
+}
 
-const InstanceDashboard = ({ instanceData, alerts, isLoading, specificMessage }) => { // Added specificMessage prop
-  if (isLoading) {
+const InstanceDashboard: React.FC<InstanceDashboardProps> = ({ instanceData, alerts, isLoading, specificMessage }) => {
+  if (isLoading) { // Should not be true for long as no real loading happens
     return <div className="text-center p-10"><WrenchScrewdriverIcon className="w-12 h-12 text-sky-500 animate-spin mx-auto mb-4" />Fetching data...</div>;
   }
 
@@ -113,21 +131,33 @@ const InstanceDashboard = ({ instanceData, alerts, isLoading, specificMessage })
     );
   }
 
-  if (!instanceData) {
-    return <div className="text-center p-10 text-gray-400">Select an instance to view its dashboard, or add a new one. Ensure instance configuration is complete.</div>;
+  // This will be the default view if no instance is selected or if specificMessage is not set by App.tsx logic
+  if (!instanceData) { 
+    return (
+        <div className="p-6 bg-gray-800 shadow-xl rounded-lg text-center">
+            <InformationCircleIcon className="w-12 h-12 text-sky-400 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-sky-300 mb-2">Proxmox Instance Dashboard</h3>
+            <p className="text-gray-300 leading-relaxed max-w-2xl mx-auto">
+                Select an instance from the 'Instances' tab to view its details.
+                If an instance is selected, and you see this message, it means live data cannot be fetched.
+                This application requires a backend component to connect to your Proxmox server.
+            </p>
+        </div>
+    );
   }
   
+  // The following code for displaying nodes, VMs, LXCs will not be reached
+  // because instanceData will be null. It's kept for potential future backend integration.
   const systemAlerts = alerts.filter(a => a.resourceType === 'System' || !a.resourceType);
   const nodeAlerts = alerts.filter(a => a.resourceType === 'Node');
   const vmAlerts = alerts.filter(a => a.resourceType === 'VM');
   const lxcAlerts = alerts.filter(a => a.resourceType === 'LXC');
 
-
   return (
     <div className="space-y-8 p-1">
       <div>
         <h2 className="text-3xl font-bold text-sky-300 mb-2">Instance: {instanceData.id.split('-')[0]} Overview</h2>
-        <p className="text-sm text-gray-500">Last updated: {new Date(instanceData.lastUpdated).toLocaleString()} (Mock Data)</p>
+        <p className="text-sm text-gray-500">Last updated: {instanceData.lastUpdated ? new Date(instanceData.lastUpdated).toLocaleString() : 'N/A'}</p>
       </div>
 
       { (systemAlerts.length + nodeAlerts.length > 0) && (
@@ -148,7 +178,6 @@ const InstanceDashboard = ({ instanceData, alerts, isLoading, specificMessage })
           </div>
         </div>
       )}
-
 
       <div>
         <h3 className="text-2xl font-semibold text-gray-200 mb-4">Nodes ({instanceData.nodes.length})</h3>

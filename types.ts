@@ -6,19 +6,17 @@ export interface ProxmoxInstanceConfig {
   apiToken: string; // Stored, but not actually used to connect in this mock version
 }
 
-// Converted Status enum to a plain JS object
-export const Status = {
-  Running: 'Running',
-  Stopped: 'Stopped',
-  Suspended: 'Suspended',
-  Error: 'Error',
-  Unknown: 'Unknown',
-  Ok: 'OK',
-  Warning: 'Warning',
-  Critical: 'Critical',
-};
-// Ensure Status type can still be used for type checking if TS is processed
-export type StatusType = typeof Status[keyof typeof Status];
+export enum Status {
+  Running = 'Running',
+  Stopped = 'Stopped',
+  Suspended = 'Suspended',
+  Error = 'Error',
+  Unknown = 'Unknown',
+  Ok = 'OK', // For services primarily
+  Warning = 'Warning', // For services or general warnings
+  Critical = 'Critical', // For services or critical alerts
+}
+export type StatusType = Status;
 
 
 export interface Metric {
@@ -52,13 +50,13 @@ export interface NetworkInterface {
 
 export interface ProxmoxService {
   name: string;
-  status: StatusType; // Use StatusType for type checking
+  status: StatusType;
 }
 
 export interface ProxmoxNode {
   id: string;
   name: string;
-  status: StatusType; // Use StatusType
+  status: StatusType;
   cpu: CpuMetric;
   memory: Metric;
   swap: Metric;
@@ -76,7 +74,7 @@ export interface VirtualResource {
   id: string; // vmid or ctid
   type: 'VM' | 'LXC';
   name: string;
-  status: StatusType; // Use StatusType
+  status: StatusType;
   nodeId: string;
   cpuUsage: number; // percentage
   memory: Metric;

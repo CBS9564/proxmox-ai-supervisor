@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { UserSettings, TabOption } from './types'; // Modified: Added TabOption
 import { ServerIcon, ComputerDesktopIcon, ChatBubbleLeftEllipsisIcon, CogIcon, DocumentTextIcon } from '@heroicons/react/24/outline'; // Using Heroicons
@@ -16,7 +17,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   },
 };
 
-export const MOCK_DATA_REFRESH_INTERVAL_MS = 30000; // 30 seconds for mock data "refresh"
+// export const MOCK_DATA_REFRESH_INTERVAL_MS = 30000; // Removed
 export const MAX_CHAT_HISTORY = 20;
 
 

@@ -1,26 +1,29 @@
 
 import React, { useState } from 'react';
-// Removed ProxmoxInstanceConfig import as it's a type
-import { PlusCircleIcon, TrashIcon, ServerStackIcon, WifiIcon, CheckCircleIcon, XCircleIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ProxmoxInstanceConfig } from '../types';
+import { PlusCircleIcon, TrashIcon, ServerStackIcon } from '@heroicons/react/24/outline'; // Removed WifiIcon, CheckCircleIcon, XCircleIcon, ArrowPathIcon
 
-// Removed InstanceConfiguratorProps interface
-// Removed TestStatus type alias
-// Removed TestResult interface
+interface InstanceConfiguratorProps {
+  instances: ProxmoxInstanceConfig[];
+  onAddInstance: (instance: ProxmoxInstanceConfig) => void;
+  onRemoveInstance: (instanceId: string) => void;
+  onSelectInstance: (instanceId: string | null) => void;
+  selectedInstanceId: string | null;
+}
 
-const InstanceConfigurator = ({
+const InstanceConfigurator: React.FC<InstanceConfiguratorProps> = ({
   instances,
   onAddInstance,
   onRemoveInstance,
   onSelectInstance,
   selectedInstanceId,
 }) => {
-  const [name, setName] = useState('');
-  const [apiUrl, setApiUrl] = useState('');
-  const [apiToken, setApiToken] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [testResults, setTestResults] = useState({}); // Simplified state type
+  const [name, setName] = useState<string>('');
+  const [apiUrl, setApiUrl] = useState<string>('');
+  const [apiToken, setApiToken] = useState<string>('');
+  const [showForm, setShowForm] = useState<boolean>(false);
 
-  const handleSubmit = (e) => { // Removed e: React.FormEvent type
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !apiUrl.trim() || !apiToken.trim()) {
       alert('Please fill in all fields for the Proxmox instance.');
@@ -37,55 +40,6 @@ const InstanceConfigurator = ({
     setApiUrl('');
     setApiToken('');
     setShowForm(false);
-    setTestResults(prev => ({ ...prev, [newInstanceId]: { status: 'idle' } }));
-  };
-
-  const handleTestConnection = async (instance) => { // Removed instance: ProxmoxInstanceConfig type
-    setTestResults(prev => ({ ...prev, [instance.id]: { status: 'testing', message: 'Testing...' } }));
-
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call delay
-
-    const urlIsValid = instance.apiUrl.startsWith('https://') && instance.apiUrl.includes(':8006');
-    
-    const atIndex = instance.apiToken.indexOf('@');
-    const exclamationIndex = instance.apiToken.indexOf('!');
-    const equalsIndex = instance.apiToken.indexOf('=');
-
-    const tokenIsValid = 
-      atIndex > 0 && 
-      exclamationIndex > atIndex + 1 && 
-      equalsIndex > exclamationIndex + 1 && 
-      equalsIndex < instance.apiToken.length - 5 && 
-      instance.apiToken.length > 20;
-
-    if (urlIsValid && tokenIsValid) {
-      setTestResults(prev => ({
-        ...prev,
-        [instance.id]: { status: 'success', message: 'Connection successful (mock)' },
-      }));
-    } else {
-      let errorMessage = 'Connection failed (mock):';
-      if (!urlIsValid) errorMessage += ' Invalid API URL format (expected https://...:8006).';
-      if (!tokenIsValid) errorMessage += ' Invalid API Token format (expected user@realm!tokenid=secret_value).';
-      setTestResults(prev => ({
-        ...prev,
-        [instance.id]: { status: 'error', message: errorMessage.trim() },
-      }));
-    }
-  };
-
-
-  const getStatusIcon = (status) => { // Removed status: TestStatus type
-    switch (status) {
-      case 'testing':
-        return <ArrowPathIcon className="w-4 h-4 text-sky-400 animate-spin" />;
-      case 'success':
-        return <CheckCircleIcon className="w-4 h-4 text-green-400" />;
-      case 'error':
-        return <XCircleIcon className="w-4 h-4 text-red-400" />;
-      default:
-        return null;
-    }
   };
 
   return (
@@ -112,9 +66,10 @@ const InstanceConfigurator = ({
               type="text"
               id="instanceName"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
               placeholder="e.g., Home Lab PVE"
               className="mt-1 block w-full bg-gray-600 border-gray-500 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
+              required
             />
           </div>
           <div>
@@ -123,21 +78,24 @@ const InstanceConfigurator = ({
               type="text"
               id="apiUrl"
               value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiUrl(e.target.value)}
               placeholder="e.g., https://proxmox.example.com:8006"
               className="mt-1 block w-full bg-gray-600 border-gray-500 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
+              required
             />
           </div>
           <div>
-            <label htmlFor="apiToken" className="block text-sm font-medium text-gray-300">API Token (mock)</label>
+            <label htmlFor="apiToken" className="block text-sm font-medium text-gray-300">API Token</label>
             <input
               type="password"
               id="apiToken"
               value={apiToken}
-              onChange={(e) => setApiToken(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)}
               placeholder="user@realm!tokenid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               className="mt-1 block w-full bg-gray-600 border-gray-500 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
+              required
             />
+             <p className="text-xs text-gray-400 mt-1">This token is stored in your browser's local storage.</p>
           </div>
           <button
             type="submit"
@@ -154,9 +112,7 @@ const InstanceConfigurator = ({
 
       {instances.length > 0 && (
         <div className="space-y-3">
-          {instances.map(instance => {
-            const testResult = testResults[instance.id] || { status: 'idle' };
-            return (
+          {instances.map(instance => (
               <div
                 key={instance.id}
                 className={`p-4 rounded-md transition-all duration-200 
@@ -178,31 +134,10 @@ const InstanceConfigurator = ({
                         <TrashIcon className="w-5 h-5" />
                     </button>
                 </div>
-                <div className="mt-2 pt-2 border-t border-gray-600 flex justify-between items-center">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleTestConnection(instance); }}
-                        disabled={testResult.status === 'testing'}
-                        className="flex items-center text-xs px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-md disabled:opacity-60 disabled:cursor-not-allowed"
-                        aria-label={`Test connection for ${instance.name}`}
-                    >
-                        <WifiIcon className="w-4 h-4 mr-1" />
-                        Test
-                    </button>
-                    {testResult.status !== 'idle' && (
-                    <div className="flex items-center ml-2 text-xs">
-                        {getStatusIcon(testResult.status)}
-                        <span className={`ml-1 ${
-                            testResult.status === 'success' ? 'text-green-300' :
-                            testResult.status === 'error' ? 'text-red-300' : 'text-sky-300'
-                        }`}>
-                        {testResult.message}
-                        </span>
-                    </div>
-                    )}
-                </div>
+                {/* Test connection UI removed */}
               </div>
-            );
-          })}
+            )
+          )}
         </div>
       )}
        {instances.length > 0 && selectedInstanceId && (

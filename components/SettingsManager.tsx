@@ -1,26 +1,24 @@
 
 import React, { useState, useEffect } from 'react';
-// import { UserSettings } from '../types'; // Type for props and state
-import { DEFAULT_USER_SETTINGS, MOCK_API_KEY_PLACEHOLDER } from '../constants';
-import { Cog8ToothIcon, ShieldCheckIcon, AdjustmentsHorizontalIcon, BellAlertIcon } from '@heroicons/react/24/outline';
+import { UserSettings } from '../types';
+import { DEFAULT_USER_SETTINGS } from '../constants'; // MOCK_API_KEY_PLACEHOLDER not needed here anymore
+import { Cog8ToothIcon, ShieldCheckIcon, AdjustmentsHorizontalIcon, BellAlertIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
-// Removed SettingsManagerProps interface
+interface SettingsManagerProps {
+  userSettings: UserSettings;
+  onUpdateSettings: (settings: UserSettings) => void;
+  isApiKeyConfigured: boolean;
+}
 
-const SettingsManager = ({ userSettings, onUpdateSettings, apiKey, onUpdateApiKey }) => { // Removed React.FC and props type
-  const [currentSettings, setCurrentSettings] = useState(userSettings); // Removed UserSettings type argument
-  const [currentApiKey, setCurrentApiKey] = useState(apiKey); // Removed string type argument
-  const [showApiKey, setShowApiKey] = useState(false); // Removed boolean type argument
+const SettingsManager: React.FC<SettingsManagerProps> = ({ userSettings, onUpdateSettings, isApiKeyConfigured }) => {
+  const [currentSettings, setCurrentSettings] = useState<UserSettings>(userSettings);
 
   useEffect(() => {
     setCurrentSettings(userSettings);
   }, [userSettings]);
 
-  useEffect(() => {
-    setCurrentApiKey(apiKey);
-  }, [apiKey]);
-
-  const handleSettingChange = (e) => { // Removed e: React.ChangeEvent<HTMLInputElement> type
-    const { name, value, type, checked } = e.target;
+  const handleSettingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
     const [category, key] = name.split('.');
 
     if (category === 'alertThresholds' && key) {
@@ -39,19 +37,11 @@ const SettingsManager = ({ userSettings, onUpdateSettings, apiKey, onUpdateApiKe
     }
   };
 
-  const handleApiKeyChange = (e) => { // Removed e: React.ChangeEvent<HTMLInputElement> type
-    setCurrentApiKey(e.target.value);
-  };
-
   const handleSaveSettings = () => {
     onUpdateSettings(currentSettings);
-    onUpdateApiKey(currentApiKey);
     alert('Settings saved!');
   };
   
-  const isApiKeyDefaultPlaceholder = process.env.API_KEY === MOCK_API_KEY_PLACEHOLDER;
-
-
   return (
     <div className="p-6 bg-gray-800 shadow-xl rounded-lg">
       <h2 className="text-2xl font-semibold text-sky-400 mb-6 flex items-center">
@@ -60,35 +50,26 @@ const SettingsManager = ({ userSettings, onUpdateSettings, apiKey, onUpdateApiKe
       </h2>
 
       <div className="space-y-6">
-        {/* API Key Management */}
+        {/* API Key Status Display */}
         <div className="p-4 bg-gray-700 rounded-md">
           <h3 className="text-lg font-medium text-gray-200 mb-2 flex items-center">
             <ShieldCheckIcon className="w-6 h-6 mr-2 text-green-400" />
-            Gemini API Key
+            Gemini API Key Status
           </h3>
-          {isApiKeyDefaultPlaceholder ? (
-            <>
-                <p className="text-sm text-gray-400 mb-2">
-                    Your Gemini API key is currently set via a placeholder. 
-                    It's recommended to set the <code>API_KEY</code> environment variable for production.
-                    You can override it here for this session.
-                </p>
-                <div className="flex items-center space-x-2">
-                    <input
-                    type={showApiKey ? "text" : "password"}
-                    value={currentApiKey === MOCK_API_KEY_PLACEHOLDER ? '' : currentApiKey}
-                    onChange={handleApiKeyChange}
-                    placeholder="Enter your Gemini API Key"
-                    className="flex-grow mt-1 block w-full bg-gray-600 border-gray-500 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
-                    />
-                    <button onClick={() => setShowApiKey(!showApiKey)} className="p-2 text-gray-400 hover:text-gray-200">
-                        {showApiKey ? "Hide" : "Show"}
-                    </button>
-                </div>
-            </>
+          {isApiKeyConfigured ? (
+            <div className="flex items-center text-sm text-green-300">
+              <CheckCircleIcon className="w-5 h-5 mr-2" />
+              <span>Gemini API Key is configured via environment variable (API_KEY).</span>
+            </div>
           ) : (
-            <p className="text-sm text-green-400">Gemini API key is configured via environment variable.</p>
+            <div className="flex items-center text-sm text-yellow-300">
+              <XCircleIcon className="w-5 h-5 mr-2 text-yellow-400" />
+              <span>Gemini API Key is not configured. Please set the <code>API_KEY</code> environment variable for AI features.</span>
+            </div>
           )}
+           <p className="text-xs text-gray-400 mt-2">
+            The API key must be set as an environment variable (<code>API_KEY</code>) in the execution environment of this application. It cannot be configured through this UI.
+          </p>
         </div>
 
         {/* Alert Thresholds */}
@@ -169,7 +150,7 @@ const SettingsManager = ({ userSettings, onUpdateSettings, apiKey, onUpdateApiKe
           onClick={handleSaveSettings}
           className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500 transition-colors"
         >
-          Save All Settings
+          Save Alert & Report Settings
         </button>
       </div>
     </div>

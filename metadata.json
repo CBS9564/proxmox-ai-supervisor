@@ -1,5 +1,6 @@
 {
   "name": "Proxmox AI Supervisor",
   "description": "An AI-powered dashboard for monitoring and managing Proxmox VE instances, featuring alerts, reports, and an AI assistant.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "prompt": ""
 }

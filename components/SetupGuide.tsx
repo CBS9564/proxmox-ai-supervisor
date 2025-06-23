@@ -1,27 +1,27 @@
 
 import React, { useState } from 'react';
-import { KeyIcon, ServerStackIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { MOCK_API_KEY_PLACEHOLDER } from '../constants';
+import { KeyIcon, ServerStackIcon, InformationCircleIcon, XMarkIcon, ShieldCheckIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline'; // Added CheckCircleIcon, XCircleIcon
+import { ProxmoxInstanceConfig } from '../types';
 
-const SetupGuide = ({
-  onSaveApiKey,
+export interface SetupGuideProps {
+  onSaveInstance: (instance: ProxmoxInstanceConfig) => void;
+  onDismiss: () => void;
+  isApiKeyPreConfigured: boolean; // New prop to indicate if API key is already set
+}
+
+const SetupGuide: React.FC<SetupGuideProps> = ({
   onSaveInstance,
   onDismiss,
-  currentApiKey
+  isApiKeyPreConfigured
 }) => {
-  const [step, setStep] = useState(1);
-  const [apiKey, setApiKey] = useState(currentApiKey === MOCK_API_KEY_PLACEHOLDER ? '' : currentApiKey);
-  const [showRealApiKey, setShowRealApiKey] = useState(false);
+  const [step, setStep] = useState<number>(isApiKeyPreConfigured ? 2 : 1); // Start at step 2 if API key already configured
 
-  const [instanceName, setInstanceName] = useState('');
-  const [instanceApiUrl, setInstanceApiUrl] = useState('');
-  const [instanceApiToken, setInstanceApiToken] = useState('');
+  const [instanceName, setInstanceName] = useState<string>('');
+  const [instanceApiUrl, setInstanceApiUrl] = useState<string>('');
+  const [instanceApiToken, setInstanceApiToken] = useState<string>('');
 
-  const handleSaveApiKey = () => {
-    if (apiKey.trim()) {
-      onSaveApiKey(apiKey);
-    }
-    setStep(2); // Move to next step even if API key is not entered (user might set it later)
+  const handleProceedToInstanceSetup = () => {
+    setStep(2); 
   };
 
   const handleSaveInstanceAndFinish = () => {
@@ -29,14 +29,14 @@ const SetupGuide = ({
       alert('Please fill in all fields for the Proxmox instance.');
       return;
     }
-    const newInstance = {
+    const newInstance: ProxmoxInstanceConfig = {
       id: Date.now().toString(),
-      name: instanceName,
-      apiUrl: instanceApiUrl,
-      apiToken: instanceApiToken,
+      name: instanceName.trim(),
+      apiUrl: instanceApiUrl.trim(),
+      apiToken: instanceApiToken.trim(),
     };
     onSaveInstance(newInstance);
-    onDismiss(); // This will also set the 'setupGuideCompleted' flag in App.tsx
+    onDismiss(); 
   };
 
   return (
@@ -54,48 +54,36 @@ const SetupGuide = ({
         
         <div className="mb-4 p-3 bg-sky-800 bg-opacity-50 rounded-md border border-sky-700">
             <InformationCircleIcon className="w-6 h-6 inline mr-2 text-sky-300" />
-            <span className="text-sm text-sky-300">This is a frontend-only demonstration. API keys and instance tokens are stored in your browser's local storage and are not sent to any external server by this application itself (except the Gemini API key to Google's servers). For real-time Proxmox data, a backend component is required.</span>
+            <span className="text-sm text-sky-300">This is a frontend-only demonstration. API keys and instance tokens are stored in your browser's local storage and are not sent to any external server by this application itself (except the Gemini API key to Google's servers if configured via environment variable). For real-time Proxmox data, a backend component is required.</span>
         </div>
 
-
-        {/* Step 1: API Key */}
         {step === 1 && (
           <div className="space-y-6">
             <div className="text-center">
                 <div className="inline-block p-3 bg-sky-700 rounded-full mb-3">
-                    <KeyIcon className="w-8 h-8 text-sky-300" />
+                    <ShieldCheckIcon className="w-8 h-8 text-sky-300" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-100 mb-1">Step 1: Configure Gemini API Key</h3>
-                <p className="text-sm text-gray-400">
-                To use the AI Assistant and AI-powered reporting features, you need a Google Gemini API Key.
-                You can obtain one from <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">Google AI Studio</a>.
+                <h3 className="text-xl font-semibold text-gray-100 mb-1">Step 1: Gemini API Key Configuration</h3>
+                <p className="text-sm text-gray-400 mb-3">
+                For AI Assistant and AI-powered reporting, this application requires a Google Gemini API Key.
+                This key must be provided as an environment variable named <code>API_KEY</code> to the application when it's built or run.
+                </p>
+                {isApiKeyPreConfigured ? (
+                    <div className="p-3 bg-green-700 bg-opacity-30 rounded-md border border-green-600 text-green-300 text-sm">
+                        <CheckCircleIcon className="w-5 h-5 inline mr-1" /> API Key appears to be configured.
+                    </div>
+                ) : (
+                    <div className="p-3 bg-yellow-700 bg-opacity-30 rounded-md border border-yellow-600 text-yellow-300 text-sm">
+                        <XCircleIcon className="w-5 h-5 inline mr-1" /> API Key is not detected. Please ensure the <code>API_KEY</code> environment variable is set. AI features will be disabled otherwise.
+                    </div>
+                )}
+                 <p className="text-xs text-gray-500 mt-2">
+                    You can obtain a Gemini API Key from <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">Google AI Studio</a>.
                 </p>
             </div>
             
-            <div>
-              <label htmlFor="setupApiKey" className="block text-sm font-medium text-gray-300 mb-1">Your Gemini API Key</label>
-              <div className="flex items-center space-x-2">
-                <input
-                    type={showRealApiKey ? "text" : "password"}
-                    id="setupApiKey"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter your Gemini API Key"
-                    className="flex-grow mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
-                />
-                <button 
-                    type="button"
-                    onClick={() => setShowRealApiKey(!showRealApiKey)} 
-                    className="p-2.5 mt-1 text-xs bg-gray-600 hover:bg-gray-500 rounded-md text-gray-300"
-                >
-                    {showRealApiKey ? "Hide" : "Show"}
-                </button>
-              </div>
-               <p className="text-xs text-gray-500 mt-1">You can skip this and add it later in Settings if you prefer.</p>
-            </div>
-            
             <button
-              onClick={handleSaveApiKey}
+              onClick={handleProceedToInstanceSetup}
               className="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white font-semibold rounded-lg shadow-md transition-colors duration-150 flex items-center justify-center"
             >
               Next: Configure Proxmox Instance <span className="ml-2">&rarr;</span>
@@ -103,14 +91,13 @@ const SetupGuide = ({
           </div>
         )}
 
-        {/* Step 2: Proxmox Instance */}
         {step === 2 && (
           <div className="space-y-6">
             <div className="text-center">
                 <div className="inline-block p-3 bg-sky-700 rounded-full mb-3">
                     <ServerStackIcon className="w-8 h-8 text-sky-300" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-100 mb-1">Step 2: Add Your First Proxmox Instance</h3>
+                <h3 className="text-xl font-semibold text-gray-100 mb-1">Step {isApiKeyPreConfigured ? '1' : '2'}: Add Your First Proxmox Instance</h3>
                 <p className="text-sm text-gray-400">
                 Provide connection details for your Proxmox VE server.
                 </p>
@@ -122,7 +109,7 @@ const SetupGuide = ({
                 type="text"
                 id="setupInstanceName"
                 value={instanceName}
-                onChange={(e) => setInstanceName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInstanceName(e.target.value)}
                 placeholder="e.g., Home Lab PVE"
                 className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
               />
@@ -133,7 +120,7 @@ const SetupGuide = ({
                 type="text"
                 id="setupApiUrl"
                 value={instanceApiUrl}
-                onChange={(e) => setInstanceApiUrl(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInstanceApiUrl(e.target.value)}
                 placeholder="https://your-proxmox-ip-or-domain:8006"
                 className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
               />
@@ -145,7 +132,7 @@ const SetupGuide = ({
                 type="password"
                 id="setupApiToken"
                 value={instanceApiToken}
-                onChange={(e) => setInstanceApiToken(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInstanceApiToken(e.target.value)}
                 placeholder="user@realm!tokenid=secret-uuid"
                 className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm text-gray-100"
               />
@@ -153,12 +140,14 @@ const SetupGuide = ({
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                onClick={() => setStep(1)}
-                className="w-full sm:w-auto py-2.5 px-4 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-md transition-colors duration-150"
-                >
-                &larr; Back to API Key
-                </button>
+                {!isApiKeyPreConfigured && (
+                  <button
+                  onClick={() => setStep(1)}
+                  className="w-full sm:w-auto py-2.5 px-4 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-md transition-colors duration-150"
+                  >
+                  &larr; Back to API Key Info
+                  </button>
+                )}
                 <button
                 onClick={handleSaveInstanceAndFinish}
                 className="w-full sm:flex-1 py-2.5 px-4 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg shadow-md transition-colors duration-150"
@@ -170,7 +159,7 @@ const SetupGuide = ({
         )}
          <div className="mt-8 text-center">
             <button onClick={onDismiss} className="text-sm text-gray-500 hover:text-sky-400">
-                {step === 1 && apiKey.trim() === '' ? "Skip setup and configure later" : "I'll configure everything later"}
+                Skip setup and configure later
             </button>
         </div>
       </div>
